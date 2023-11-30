@@ -1,0 +1,7 @@
+# Scrapy==2.5.0
+# scrapy-random-useragent==0.2
+# scrapy-rotating-proxies==0.6.2
+# requests==2.23.0
+# sendgrid==6.4.8
+# python-dotenv==0.17.1
+# pipenv ==1.2.0

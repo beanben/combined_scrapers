@@ -1,0 +1,10 @@
+Errors:
+1) Unite spider not launched - test in isolation
+
+Next steps:
+1) Scrape YMCA The Bridge in Guildford
+2) Add affiliated unis to each operators
+3) try to capture sqft/sqm of rooms
+4) Correct rents on Nexo scraper to be aligned with student_housing
+5) scrape https://unineststudents.ie
+6) scrape downingstudentds.com
