@@ -27,89 +27,81 @@ class UniteSpider(Spider):
                 "name": link.css('::text').get(),
                 "url":  f"{self.base_url}{city_url}"
             }
-            # pdb.set_trace()
             yield Request(url=city["url"], callback=self.parse_properties, meta={"city": city})
 
     def parse_properties(self, res):
         city_meta = res.meta['city']
+        script_json_str = self.extract_script(res)
+        if not script_json_str:
+            return
 
-        script = [script for script in res.css(
-            'script::text').getall() if "ReactDOM" in script][0]
-        
-        
+        try:
+            script_json = json.loads(script_json_str)
+        except json.JSONDecodeError as e:
+            self.logger.error(f"JSON parsing error: {e}")
+            return
 
-        start = script.find("CityMapFilterListing, ") + \
-            len("CityMapFilterListing, ")
-        end = script.find(
-            '), document.getElementById("FooterV2')
-        
-        pdb.set_trace()
-        script_json = json.loads(script[start:end])
+        # for element in script_json["institution"]:
+        #     yield self.create_campus_item(element, city_meta)
 
-        # campus item
-        for element in script_json["data"]["institution"]:
-            campus_item = CampusItem({
-                "latitude": float(element["lat"]),
-                "longitude": float(element["long"]),
-                "institution": element["name"],
-                "city": res.meta["city"]["name"]
-            })
+        for building in script_json["uniteProperties"]:
+             yield Request(
+                 url = f'{self.base_url}{building["propertyPageUrl"]}',
+                 callback=self.parse_building,
+                 meta = {
+                    "building_item": self.create_building_item(building, city_meta),
+                    "offers": building.get("offerTitle", "n/a"),
+                    "building_id": building["propertySerial"]
+                 }
+             )
 
-            # campus name
-            campus_name = element["campus"]
-            if not campus_name:
-                campus_name = element["name"]
-            campus_item["name"] = campus_name
+    def extract_script(self, response):
+        try:
+            script = next(script for script in response.css(
+                'script::text').getall() if "ReactDOM" in script)
+            start_marker = 'CityPageManager, '
+            end_marker = ',"gtmCid":"GTM-THBRD"'
+            start = script.find(start_marker) + len(start_marker)
+            end = script.find(end_marker)
+            if start == -1 or end == -1:
+                raise ValueError("Start or end marker not found in script")
+            return script[start:end] + '}'
+        except (IndexError, ValueError) as e:
+            self.logger.error(f"Script extraction error: {e}")
+            return None
 
-            yield campus_item
+    # def create_campus_item(self, element, city_meta):
+    #     campus_name = element.get("campus", element["name"])
+    #     return CampusItem({
+    #         "latitude": float(element["lat"]),
+    #         "longitude": float(element["long"]),
+    #         "institution": element["name"],
+    #         "city": city_meta["name"],
+    #         "name": campus_name,
+    #         "country": get_country(float(element["lat"]), float(element["long"])),
+            
+    #     })
+    
+    def create_building_item(self, building, city_meta):
+        # pdb.set_trace()
+        return BuildingItem({
+            "facilities": [facility["title"] for facility in building["facilities"]],
+            "name": building["name"],
+            "url": f'{self.base_url}{building["propertyPageUrl"]}',
+            "latitude": building["lat"],
+            "longitude": building["long"],
+            "address": self.format_address(building["address"]),
+            "postcode": building["address"]["postcode"].replace("\r", ""),
+            "city": city_meta["name"],
+            "operator": "Unite Students"
+        })
 
-        for property in script_json["data"]["propertyData"]:
+    def format_address(self, address_data):
+        address_line1 = address_data["addressLine1"].replace("\r", "")
+        address_line2 = address_data.get("addressLine2","").replace("\r", "")
+        return f'{address_line1}, {address_line2}' if address_line2 else f'{address_line1}'
 
-            # facilities
-            facilities = [facility["title"]
-                          for facility in property["propertyFacilities"]]
-
-            # address
-            address_line1 = property["propertyAddress"]["addressLine1"]
-            address_line2 = property["propertyAddress"]["addressLine2"]
-            city = city_meta["name"]
-            postcode = property["propertyAddress"]["postcode"]
-
-            if address_line1:
-                address_line1 = address_line1.replace("\r", "")
-            if address_line2:
-                address_line2 = address_line2.replace("\r", "")
-            if postcode:
-                postcode = postcode.replace("\r", "")
-
-            if address_line2:
-                address = f'{address_line1}, {address_line2}, {postcode} {city}'
-            else:
-                address = f'{address_line1}, {postcode} {city}'
-
-            building_item = BuildingItem({
-                "facilities": facilities,
-                "name": property["propertyName"],
-                "url": f'{self.base_url}{property["propertyUrl"]}',
-                "latitude": property["lat"],
-                "longitude": property["long"],
-                "address": address,
-                "city": city,
-                "operator": "Unite Students"
-            })
-
-            # country
-            building_item["country"] = get_country(
-                building_item["latitude"], building_item["longitude"])
-
-            # offers
-            offers = "n/a"
-            offers_description = property["offerTitle"]
-            if offers_description:
-                offers = offers_description
-
-            yield Request(url=building_item["url"], callback=self.parse_building, meta={"building_item": building_item, "offers": offers, "building_id": property["propertySerial"]})
-
+    # COTINUE HERE 
     def parse_building(self, res):
         building_item = res.meta["building_item"]
         offers = res.meta["offers"]

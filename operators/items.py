@@ -11,6 +11,7 @@ class CampusItem(Item):
 
 class BuildingItem(Item):
     address = Field()
+    postcode = Field()
     city = Field()
     country = Field()
     description = Field()
